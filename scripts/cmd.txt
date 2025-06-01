@@ -1,0 +1,17 @@
+docker exec -it mysql-etl mysql -u etl_user -petlpass etl_db
+
+############################################################
+
+DROP TABLE UsersInterests;
+DROP TABLE Users;
+DROP TABLE Genders;
+DROP TABLE Locations;
+DROP TABLE Interests;
+DROP TABLE Advertisers;
+DROP TABLE AdSlots;
+DROP TABLE CampaignTargetAge;
+DROP TABLE CampaignTargetLocations;
+DROP TABLE CampaignTargetInterests;
+DROP TABLE Campaigns;
+
+############################################################
