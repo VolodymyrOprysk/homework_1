@@ -2,16 +2,26 @@ docker exec -it mysql-etl mysql -u etl_user -petlpass etl_db
 
 ############################################################
 
-DROP TABLE UsersInterests;
-DROP TABLE Users;
-DROP TABLE Genders;
-DROP TABLE Locations;
-DROP TABLE Interests;
-DROP TABLE Advertisers;
-DROP TABLE AdSlots;
-DROP TABLE CampaignTargetAge;
-DROP TABLE CampaignTargetLocations;
-DROP TABLE CampaignTargetInterests;
-DROP TABLE Campaigns;
+DROP TABLE IF EXISTS CampaignsTargetingLocations;
+DROP TABLE IF EXISTS CampaignsTargetingInterests;
+DROP TABLE IF EXISTS Campaigns;
+DROP TABLE IF EXISTS UsersInterests;
+DROP TABLE IF EXISTS Users;
+DROP TABLE IF EXISTS AdSlotSizes;
+DROP TABLE IF EXISTS Advertisers;
+DROP TABLE IF EXISTS Interests;
+DROP TABLE IF EXISTS Locations;
+DROP TABLE IF EXISTS Genders;
 
 ############################################################
+
+SELECT * FROM Genders LIMIT 10;
+SELECT * FROM Locations LIMIT 10;
+SELECT * FROM Interests LIMIT 10;
+SELECT * FROM Users LIMIT 10;
+SELECT * FROM UsersInterests LIMIT 10;
+SELECT * FROM Advertisers LIMIT 10;
+SELECT * FROM AdSlotSizes LIMIT 10;
+SELECT * FROM Campaigns LIMIT 10;
+SELECT * FROM CampaignsTargetingInterests LIMIT 10;
+SELECT * FROM CampaignsTargetingLocations LIMIT 10;
