@@ -2,27 +2,31 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 from db_schema_setup import create_db_tables
+from loggeeer import get_logger
 
 chunk_size = 100_000
-
+logger = get_logger()
 
 # --- Precreate tables ---
 engine = create_engine(
     "mysql+pymysql://etl_user:etlpass@localhost:3306/etl_db"
 )
 
-# create_db_tables(engine)
+logger.info("Created DB engine")
+
+create_db_tables(engine)
 
 
 # --- Extract ---
+logger.info("Extracting CSV...")
 users_csv_df = pd.read_csv('data/users.csv')
 campaigns_csv_df = pd.read_csv('data/campaigns.csv')
-ad_events_csv_df = pd.read_csv('data/ad_events.csv', chunksize=chunk_size)
-
+# ad_events_csv_df = pd.read_csv('data/ad_events.csv', chunksize=chunk_size)
+logger.info("CSV extracted")
 # --- Transform ---
 
 # region Users CSV
-
+logger.info("Processing users.csv...")
 # Genders
 genders_df = pd.DataFrame(users_csv_df['Gender'].unique(), columns=['Gender'])
 genders_df['GenderID'] = range(1, len(genders_df) + 1)
@@ -69,7 +73,12 @@ users_interests_df = pd.DataFrame(
     user_interests, columns=['UserID', 'InterestID'])
 users_interests_df['UserInterestID'] = range(1, len(users_interests_df) + 1)
 
+logger.info("users.csv processing finished")
+
 # endregion
+
+logger.info("Processing campaigns.csv...")
+
 
 advertisers_df = pd.DataFrame(
     campaigns_csv_df['AdvertiserName'].unique(), columns=['Advertiser'])
@@ -115,10 +124,10 @@ campaigns_targets_df = pd.DataFrame(
     campaigns_csv_df[['CampaignID', 'TargetingCriteria']])
 
 campaigns_targets_df['InterestID'] = campaigns_targets_df['TargetingCriteria'].str.split(
-    ',').str[1].replace(interests_map)
+    ',').str[1].str.strip().replace(interests_map)
 
 campaigns_targets_df['LocationID'] = campaigns_targets_df['TargetingCriteria'].str.split(
-    ',').str[2].replace(locations_map)
+    ',').str[2].str.strip().replace(locations_map)
 
 campaigns_targeting_interests_df = pd.DataFrame(campaigns_targets_df[[
     'CampaignID', 'InterestID']])
@@ -130,21 +139,32 @@ campaigns_targeting_locations_df = campaigns_targets_df[[
 campaigns_targeting_locations_df['CampaignTargetLocationID'] = range(
     1, len(campaigns_targeting_locations_df) + 1)
 
+logger.info("campaigns.csv processing finished")
 
 unique_devices = set()
+processed_chunks = []
+count = 0
 
+# First pass: Collect devices and process chunks
 for chunk in pd.read_csv('data/ad_events.csv', chunksize=chunk_size):
+    count += 1
+    logger.info(f"Processing chunk {count} out of 100...")
+
+    # Collect devices
     unique_devices.update(chunk['Device'].unique())
 
-devices_df = pd.DataFrame(sorted(unique_devices), columns=[
-                          'Device'])
+    # Store chunk for later transformation (optional: store only needed columns)
+    processed_chunks.append(chunk)
+
+# Build Devices mapping
+devices_df = pd.DataFrame(sorted(unique_devices), columns=['Device'])
 devices_df['DeviceID'] = range(1, len(devices_df) + 1)
 devices_map = dict(zip(devices_df['Device'], devices_df['DeviceID']))
 
-# Step 3: Second pass to process the data in chunks
-processed_chunks = []
+ad_events_chunks = []
+for i, chunk in enumerate(processed_chunks, start=1):
+    logger.info(f"Transforming chunk {i}...")
 
-for chunk in pd.read_csv('data/ad_events.csv', chunksize=chunk_size):
     ad_events_df = chunk[['EventID', 'CampaignName', 'UserID', 'Device', 'Timestamp',
                           'BidAmount', 'AdCost', 'WasClicked', 'ClickTimestamp', 'AdRevenue']].copy()
 
@@ -156,51 +176,37 @@ for chunk in pd.read_csv('data/ad_events.csv', chunksize=chunk_size):
         DeviceID=ad_events_df['Device'].replace(devices_map)
     ).drop(columns=['Device'])
 
-    processed_chunks.append(ad_events_df)
+    ad_events_chunks.append(ad_events_df)
 
 # Step 4: Concatenate the final DataFrame
-finalad_events_df = pd.concat(processed_chunks, ignore_index=True)
+final_ad_events_df = pd.concat(ad_events_chunks, ignore_index=True)
+final_ad_events_df.rename(columns={'EventID': 'AdEventID'}, inplace=True)
 
-
-# devices_df = pd.DataFrame(
-#     ad_events_csv_df['Device'].unique(), columns=['Device'])
-# devices_df['DeviceID'] = range(1, len(devices_df) + 1)
-# devices_map = dict(zip(devices_df['Device'], devices_df['DeviceID']))
-
-# ad_events_df = pd.DataFrame(
-#     ad_events_csv_df[['EventID', 'CampaignName', 'UserID', 'Device', 'Timestamp',
-#                       'BidAmount', 'AdCost', 'WasClicked', 'ClickTimestamp', 'AdRevenue']]
-# )
-# ad_events_df = ad_events_df.assign(
-#     CampaignID=ad_events_df['CampaignName'].replace(campaigns_map)
-# ).drop(columns=['CampaignName'])
-# ad_events_df = ad_events_df.assign(
-#     DeviceID=ad_events_df['Device'].replace(devices_map)
-# ).drop(columns=['Device'])
-
-
-breakpoint()
 # --- Load ---
-
+logger.info(f"Inserting data into DB...")
 # region USERS TO SQL
 
-# genders_df.to_sql('Genders', engine, if_exists='append', index=False)
-# locations_df.to_sql('Locations', engine, if_exists='append', index=False)
-# interests_df.to_sql('Interests', engine, if_exists='append', index=False)
-# users_df.to_sql('Users', engine, if_exists='append', index=False)
-# users_interests_df.to_sql('UsersInterests', engine,
-#                           if_exists='append', index=False)
-
-# # endregion
-
-# # region CAMPAIGNS TO SQL
-
-# advertisers_df.to_sql('Advertisers', engine, if_exists='append', index=False)
-# ad_slots_df.to_sql('AdSlotSizes', engine, if_exists='append', index=False)
-# campaigns_df.to_sql('Campaigns', engine, if_exists='append', index=False)
-# campaigns_targeting_interests_df.to_sql(
-#     'CampaignsTargetingInterests', engine, if_exists='append', index=False)
-# campaigns_targeting_locations_df.to_sql(
-#     'CampaignsTargetingLocations', engine, if_exists='append', index=False)
+genders_df.to_sql('Genders', engine, if_exists='append', index=False)
+locations_df.to_sql('Locations', engine, if_exists='append', index=False)
+interests_df.to_sql('Interests', engine, if_exists='append', index=False)
+users_df.to_sql('Users', engine, if_exists='append', index=False)
+users_interests_df.to_sql('UsersInterests', engine,
+                          if_exists='append', index=False)
 
 # endregion
+
+# region CAMPAIGNS TO SQL
+
+advertisers_df.to_sql('Advertisers', engine, if_exists='append', index=False)
+ad_slots_df.to_sql('AdSlotSizes', engine, if_exists='append', index=False)
+campaigns_df.to_sql('Campaigns', engine, if_exists='append', index=False)
+campaigns_targeting_interests_df.to_sql(
+    'CampaignsTargetingInterests', engine, if_exists='append', index=False)
+campaigns_targeting_locations_df.to_sql(
+    'CampaignsTargetingLocations', engine, if_exists='append', index=False)
+
+# endregion
+
+devices_df.to_sql('Devices', engine, if_exists='append', index=False)
+final_ad_events_df.to_sql(
+    'AdEvents', engine, if_exists='append', index=False, chunksize=chunk_size)

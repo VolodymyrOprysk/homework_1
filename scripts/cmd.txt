@@ -2,6 +2,8 @@ docker exec -it mysql-etl mysql -u etl_user -petlpass etl_db
 
 ############################################################
 
+DROP TABLE IF EXISTS AdEvents;
+DROP TABLE IF EXISTS Devices;
 DROP TABLE IF EXISTS CampaignsTargetingLocations;
 DROP TABLE IF EXISTS CampaignsTargetingInterests;
 DROP TABLE IF EXISTS Campaigns;

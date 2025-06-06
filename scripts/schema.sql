@@ -73,3 +73,22 @@ CREATE TABLE IF NOT EXISTS CampaignsTargetingLocations (
     FOREIGN KEY (CampaignID) REFERENCES Campaigns(CampaignID),
     FOREIGN KEY (LocationID) REFERENCES Locations(LocationID)
 );
+
+CREATE TABLE IF NOT EXISTS Devices (
+    DeviceID INT PRIMARY KEY AUTO_INCREMENT,
+    Device VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS AdEvents (
+    AdEventID CHAR(36) PRIMARY KEY, -- UUID/GUID
+    CampaignID INT,
+    UserID INT,
+    DeviceID INT,
+    Timestamp DATETIME,
+    BidAmount DECIMAL(10, 2),
+    AdCost DECIMAL(10, 2),
+    WasClicked BOOLEAN,
+    ClickTimestamp DATETIME,
+    AdRevenue DECIMAL(10, 2),
+    FOREIGN KEY (DeviceID) REFERENCES Devices(DeviceID)
+);
