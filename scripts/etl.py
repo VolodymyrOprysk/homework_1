@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, text
 from db_schema_setup import create_db_tables
 from loggeeer import get_logger
 
-chunk_size = 100_000
+chunk_size = 50_000
 logger = get_logger()
 
 # --- Precreate tables ---
@@ -143,18 +143,31 @@ logger.info("campaigns.csv processing finished")
 
 unique_devices = set()
 processed_chunks = []
-count = 0
+records_count = 0
+transformed_count = 0
+columns_names = []
 
-# First pass: Collect devices and process chunks
-for chunk in pd.read_csv('data/ad_events.csv', chunksize=chunk_size):
-    count += 1
-    logger.info(f"Processing chunk {count} out of 100...")
+with open('data/ad_events.csv') as f:
+    columns_line = f.readline()
+    columns_names = columns_line.replace('TargetingCriteria',
+                                         'TargetingAge,TargetingInterests,TargetingCriteria').split(',')
 
-    # Collect devices
+dtype_map = {
+    9: 'int',    # UserID
+    13: 'float',  # BidAmount
+    14: 'float',  # AdCost
+    15: 'bool',   # WasClicked
+    17: 'float',  # AdRevenue
+}
+
+for chunk in pd.read_csv('data/ad_events.csv', chunksize=chunk_size, header=None, names=columns_names, skiprows=1, dtype=dtype_map):
+    records_count += 1
+    logger.info(f"Processing chunk #{records_count}...")
+
     unique_devices.update(chunk['Device'].unique())
 
-    # Store chunk for later transformation (optional: store only needed columns)
     processed_chunks.append(chunk)
+
 
 # Build Devices mapping
 devices_df = pd.DataFrame(sorted(unique_devices), columns=['Device'])
@@ -163,10 +176,12 @@ devices_map = dict(zip(devices_df['Device'], devices_df['DeviceID']))
 
 ad_events_chunks = []
 for i, chunk in enumerate(processed_chunks, start=1):
-    logger.info(f"Transforming chunk {i}...")
+    logger.info(
+        f"Transforming chunk {transformed_count} out of {records_count}..."
+    )
 
     ad_events_df = chunk[['EventID', 'CampaignName', 'UserID', 'Device', 'Timestamp',
-                          'BidAmount', 'AdCost', 'WasClicked', 'ClickTimestamp', 'AdRevenue']].copy()
+                          'BidAmount', 'AdCost', 'WasClicked', 'ClickTimestamp', 'AdRevenue']]
 
     ad_events_df = ad_events_df.assign(
         CampaignID=ad_events_df['CampaignName'].replace(campaigns_map)
@@ -189,9 +204,10 @@ logger.info(f"Inserting data into DB...")
 genders_df.to_sql('Genders', engine, if_exists='append', index=False)
 locations_df.to_sql('Locations', engine, if_exists='append', index=False)
 interests_df.to_sql('Interests', engine, if_exists='append', index=False)
-users_df.to_sql('Users', engine, if_exists='append', index=False)
+users_df.to_sql('Users', engine, if_exists='append',
+                index=False, chunksize=chunk_size)
 users_interests_df.to_sql('UsersInterests', engine,
-                          if_exists='append', index=False)
+                          if_exists='append', index=False, chunksize=chunk_size)
 
 # endregion
 
@@ -209,4 +225,7 @@ campaigns_targeting_locations_df.to_sql(
 
 devices_df.to_sql('Devices', engine, if_exists='append', index=False)
 final_ad_events_df.to_sql(
-    'AdEvents', engine, if_exists='append', index=False, chunksize=chunk_size)
+    'AdEvents', engine, if_exists='append', index=False)
+
+
+logger.info(f"Data insertion into DB finished.")
