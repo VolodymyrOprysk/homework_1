@@ -1,10 +1,42 @@
+import os
+import subprocess
 import pandas as pd
+from pymysql import OperationalError
 from sqlalchemy import create_engine, text
 
 from db_schema_setup import create_db_tables
 from loggeeer import get_logger
 
-chunk_size = 50_000
+
+def copy_csv_to_docker_container(local_path: str, container_name: str, container_dest_path: str):
+    """Copy a local CSV file into a Docker container using `docker cp`."""
+    if not os.path.exists(local_path):
+        raise FileNotFoundError(f"CSV file not found: {local_path}")
+
+    try:
+        subprocess.run(
+            ['docker', 'cp', local_path,
+                f'{container_name}:{container_dest_path}'],
+            check=True
+        )
+        print(f"{local_path} CSV copied to container: {container_dest_path}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to copy file into Docker container: {e}")
+
+
+def delete_csv_from_docker_container(container_name: str, container_file_path: str):
+    """Delete a file from inside a Docker container using `docker exec`."""
+    try:
+        subprocess.run(
+            ['docker', 'exec', container_name, 'rm', '-f', container_file_path],
+            check=True
+        )
+        print(f"Temp CSV file deleted from container: {container_file_path}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to delete file from Docker container: {e}")
+
+
+chunk_size = 1_000_000
 logger = get_logger()
 
 # --- Precreate tables ---
@@ -199,10 +231,10 @@ devices_df.to_sql('Devices', engine, if_exists='append',
                   index=False, method='multi')
 logger.info("Inserted devices_df into DB")
 
-# Second pass: transform and insert each ad_events chunk
+
 for i, chunk in enumerate(processed_chunks, start=1):
-    logger.info(
-        f"Transforming and inserting ad_events chunk {i} out of {records_count}...")
+    logger.info(f"Transforming chunk #{i} out of {records_count}...")
+
     ad_events_df = chunk[['EventID', 'CampaignName', 'UserID', 'Device', 'Timestamp',
                           'BidAmount', 'AdCost', 'WasClicked', 'ClickTimestamp', 'AdRevenue']]
     ad_events_df = ad_events_df.assign(
@@ -211,9 +243,44 @@ for i, chunk in enumerate(processed_chunks, start=1):
     ad_events_df = ad_events_df.assign(
         DeviceID=ad_events_df['Device'].replace(devices_map)
     ).drop(columns=['Device'])
-    ad_events_df.rename(columns={'EventID': 'AdEventID'}, inplace=True)
-    ad_events_df.to_sql('AdEvents', engine, if_exists='append',
-                        index=False, method='multi')
-    logger.info(f"Inserted ad_events chunk {i} ({len(ad_events_df)}) into DB")
 
-logger.info("Data insertion into DB finished.")
+    ad_events_df['WasClicked'] = ad_events_df['WasClicked'].astype(int)
+    ad_events_df['ClickTimestamp'] = pd.to_datetime(
+        ad_events_df['ClickTimestamp'], errors='coerce')
+
+    ad_events_df.rename(columns={'EventID': 'AdEventID'}, inplace=True)
+
+    # Save chunk to local CSV
+    local_csv_path = f'data/ad_events_chunk_{i}.csv'
+    container_csv_path = f'/var/lib/mysql-files/ad_events_chunk_{i}.csv'
+
+    logger.info(f"Writing chunk #{i} to CSV: {local_csv_path}")
+    ad_events_df.to_csv(local_csv_path, index=False, na_rep='\\N')
+    # Copy CSV into MySQL container
+    copy_csv_to_docker_container(
+        local_csv_path, 'mysql-etl', container_csv_path)
+
+    # Load CSV from inside MySQL container
+    with engine.begin() as conn:
+        conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
+        try:
+            conn.execute(
+                text(f"""
+                    LOAD DATA INFILE '{container_csv_path}'
+                    INTO TABLE AdEvents
+                    FIELDS TERMINATED BY ','
+                    ENCLOSED BY '"'
+                    LINES TERMINATED BY '\\n'
+                    IGNORE 1 LINES
+                    (AdEventID, UserID, Timestamp, BidAmount, AdCost,
+                     WasClicked, ClickTimestamp, AdRevenue, CampaignID, DeviceID)
+                """)
+            )
+
+        finally:
+            os.remove(local_csv_path)
+            delete_csv_from_docker_container('mysql-etl', container_csv_path)
+
+        conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
+
+    logger.info(f"Loaded chunk #{i} into AdEvents table")

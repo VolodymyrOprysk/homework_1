@@ -89,6 +89,5 @@ CREATE TABLE IF NOT EXISTS AdEvents (
     AdCost DECIMAL(10, 2),
     WasClicked BOOLEAN,
     ClickTimestamp DATETIME,
-    AdRevenue DECIMAL(10, 2),
-    FOREIGN KEY (DeviceID) REFERENCES Devices(DeviceID)
+    AdRevenue DECIMAL(10, 2)
 );
