@@ -217,6 +217,12 @@ docker exec python-etl-container python src/etl.py
 
 ### Verification Queries
 Execute these queries to verify successful data loading:
+
+```bash
+# To exec into MySQL container
+docker exec -it mysql-etl mysql -u etl_user -petlpass etl_db
+```
+
 ```sql
 SELECT * FROM Genders LIMIT 10;
 SELECT * FROM Locations LIMIT 10;
@@ -231,6 +237,8 @@ SELECT * FROM CampaignsTargetingLocations LIMIT 10;
 SELECT * FROM Devices LIMIT 10;
 SELECT * FROM AdEvents LIMIT 10;
 ```
+
+### Results:
 
 ![Results1](img/Data1.png)
 ![Results2](img/Data2.png)
