@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS AdEvents (
 
 #### Step 0: Data Prerequisites
 
-Cope CSV with data under /data path
+Copy CSVs with data under the /data path
 ```bash
 # Required files structure:
 # /data/
