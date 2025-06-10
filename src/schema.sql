@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS AdSlotSizes (
 );
 
 CREATE TABLE IF NOT EXISTS Campaigns (
-    CampaignID INT PRIMARY KEY,
+    CampaignID INT PRIMARY KEY AUTO_INCREMENT,
     CampaignName VARCHAR(255) NOT NULL,
     AdvertiserID INT NOT NULL,
     CampaignStartDate DATE NOT NULL,
