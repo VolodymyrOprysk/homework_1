@@ -7,8 +7,8 @@ This repository contains the deliverables for the Data Engineering homework #1 a
 ## Table of Contents
 
 1.  [Normalized Relational Schema and DDL Scripts](#1-normalized-relational-schema-and-ddl-scripts)
-2.  [Local  Setup (Docker-compose/Shell Scripts)](#2-local-setup)
-3.  [Data Verification Screenshot](#3-data-verification-screenshots)
+2.  [Local  Setup](#2-local-setup)
+3.  [Data Verification Screenshots](#3-data-verification-screenshots)
 
 ---
 
@@ -20,7 +20,7 @@ The schema separates entities into distinct tables to eliminate data redundancy 
 
 You can find the DDL (Data Definition Language) scripts for each table in the `src/schema.sql` directory, and all tables will bee create automatically within the Python script. The DB schema and queries are provided below:
 
-![Database Schema](hw1.png)
+![Database Schema](img/hw1.png)
 
 ### Database Tables
 
@@ -56,7 +56,6 @@ CREATE TABLE IF NOT EXISTS Devices (
 ```
 **Comment:** Normalizes device information to avoid redundant device name storage in the main events table.
 
-#### Core Entity Tables
 ```sql
 CREATE TABLE IF NOT EXISTS Users (
     UserID INT PRIMARY KEY AUTO_INCREMENT,
@@ -154,3 +153,87 @@ CREATE TABLE IF NOT EXISTS AdEvents (
 ```
 **Comment:** Stores individual ad interaction events with foreign key references to campaigns, users, and devices for comprehensive tracking and analysis.
 
+## 2. Local Setup
+
+### Prerequisites
+- Docker and Docker Compose
+
+### Setup Instructions
+
+#### Step 0: Data Prerequisites
+
+Cope CSV with data under /data path
+```bash
+# Required files structure:
+# /data/
+# ├── users.csv
+# ├── campaigns.csv
+# ├── ad_events.csv
+
+```
+
+#### Step 1: Build Python ETL Application
+```bash
+docker build -t python-etl-app .
+```
+
+#### Step 2: Create Docker Network
+```bash
+docker network create etl-network
+```
+
+#### Step 3: Start MySQL Database Container
+```bash
+docker run --name mysql-etl --network etl-network \
+  -e MYSQL_ROOT_PASSWORD=rootpass \
+  -e MYSQL_DATABASE=etl_db \
+  -e MYSQL_USER=etl_user \
+  -e MYSQL_PASSWORD=etlpass \
+  -p 3306:3306 -d mysql:8 --local-infile=1
+```
+
+#### Step 4: Configure Database User Privileges
+```bash
+# Connect to MySQL container and grant necessary privileges
+docker exec -it mysql-etl mysql -u root -prootpass
+
+# Execute these SQL commands inside MySQL:
+GRANT FILE ON *.* TO 'etl_user'@'%';
+GRANT ALL PRIVILEGES ON etl_db.* TO 'etl_user'@'%';
+FLUSH PRIVILEGES;
+exit;
+```
+
+#### Step 5: Start Python ETL Container
+```bash
+docker run -d --name python-etl-container --network etl-network python-etl-app
+```
+
+#### Step 6: Execute Tables Creeation, Trasformation and Loading Script
+```bash
+docker exec python-etl-container python src/etl.py
+```
+## 3. Data Verification Screenshots
+
+### Verification Queries
+Execute these queries to verify successful data loading:
+```sql
+SELECT * FROM Genders LIMIT 10;
+SELECT * FROM Locations LIMIT 10;
+SELECT * FROM Interests LIMIT 10;
+SELECT * FROM Users LIMIT 10;
+SELECT * FROM UsersInterests LIMIT 10;
+SELECT * FROM Advertisers LIMIT 10;
+SELECT * FROM AdSlotSizes LIMIT 10;
+SELECT * FROM Campaigns LIMIT 10;
+SELECT * FROM CampaignsTargetingInterests LIMIT 10;
+SELECT * FROM CampaignsTargetingLocations LIMIT 10;
+SELECT * FROM Devices LIMIT 10;
+SELECT * FROM AdEvents LIMIT 10;
+```
+
+![Results1](img/Data1.png)
+![Results2](img/Data2.png)
+![Results3](img/Data3.png)
+![Results4](img/Data4.png)
+![Results5](img/Data5.png)
