@@ -2,8 +2,8 @@ import os
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from src.helpers import copy_csv_to_docker_container, create_db_tables, delete_csv_from_docker_container
-from src.logger import get_logger
+from helpers import create_db_tables
+from logger import get_logger
 
 chunk_size = 1_000_000
 logger = get_logger()
